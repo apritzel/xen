@@ -20,6 +20,7 @@
 
 #include <xen/lib.h>
 #include <xen/delay.h>
+#include <xen/libfdt/libfdt.h>
 #include <xen/mm.h>
 #include <xen/rbtree.h>
 #include <xen/sched.h>
@@ -873,6 +874,83 @@ int gicv3_lpi_change_vcpu(struct domain *d, paddr_t vdoorbell,
     gicv3_lpi_update_host_vcpuid(host_lpi, vcpu_id);
 
     return 0;
+}
+
+/*
+ * Create the respective guest DT nodes for a list of host ITSes.
+ * This copies the reg property, so the guest sees the ITS at the same address
+ * as the host.
+ * Giving NULL for the its_list will make it use the list of host ITSes.
+ */
+int gicv3_its_make_dt_nodes(struct list_head *its_list,
+                            const struct domain *d,
+                            const struct dt_device_node *gic,
+                            void *fdt)
+{
+    uint32_t len;
+    int res;
+    const void *prop = NULL;
+    const struct dt_device_node *its = NULL;
+    const struct host_its *its_data;
+
+    if ( !its_list )
+        its_list = &host_its_list;
+
+    if ( list_empty(its_list) )
+        return 0;
+
+    /* The sub-nodes require the ranges property */
+    prop = dt_get_property(gic, "ranges", &len);
+    if ( !prop )
+    {
+        printk(XENLOG_ERR "Can't find ranges property for the gic node\n");
+        return -FDT_ERR_XEN(ENOENT);
+    }
+
+    res = fdt_property(fdt, "ranges", prop, len);
+    if ( res )
+        return res;
+
+    list_for_each_entry(its_data, its_list, entry)
+    {
+        its = its_data->dt_node;
+
+        res = fdt_begin_node(fdt, its->name);
+        if ( res )
+            return res;
+
+        res = fdt_property_string(fdt, "compatible", "arm,gic-v3-its");
+        if ( res )
+            return res;
+
+        res = fdt_property(fdt, "msi-controller", NULL, 0);
+        if ( res )
+            return res;
+
+        if ( its->phandle )
+        {
+            res = fdt_property_cell(fdt, "phandle", its->phandle);
+            if ( res )
+                return res;
+        }
+
+        /* Use the same reg regions as the ITS node in host DTB. */
+        prop = dt_get_property(its, "reg", &len);
+        if ( !prop )
+        {
+            printk(XENLOG_ERR "GICv3: Can't find ITS reg property.\n");
+            res = -FDT_ERR_XEN(ENOENT);
+            return res;
+        }
+
+        res = fdt_property(fdt, "reg", prop, len);
+        if ( res )
+            return res;
+
+        fdt_end_node(fdt);
+    }
+
+    return res;
 }
 
 /* Scan the DT for any ITS nodes and create a list of host ITSes out of it. */
