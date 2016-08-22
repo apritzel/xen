@@ -20,6 +20,7 @@
 #include <xen/bitops.h>
 #include <xen/lib.h>
 #include <xen/init.h>
+#include <xen/domain_page.h>
 #include <xen/softirq.h>
 #include <xen/irq.h>
 #include <xen/sched.h>
@@ -588,6 +589,44 @@ int vgic_allocate_virq(struct domain *d, bool spi)
 void vgic_free_virq(struct domain *d, unsigned int virq)
 {
     clear_bit(virq, d->arch.vgic.allocated_irqs);
+}
+
+int vgic_access_guest_memory(struct domain *d, paddr_t gpa, void *addr,
+                             uint32_t size, bool_t is_write)
+{
+    struct page_info *page;
+    uint64_t offset;
+    p2m_type_t p2mt;
+    void *p;
+
+    page = get_page_from_gfn(d, paddr_to_pfn(gpa), &p2mt, P2M_ALLOC);
+    if ( !page )
+    {
+        printk(XENLOG_G_ERR "d%d: vITS: Failed to get table entry\n",
+               d->domain_id);
+        return -EINVAL;
+    }
+
+    if ( !p2m_is_ram(p2mt) )
+    {
+        put_page(page);
+        printk(XENLOG_G_ERR "d%d: vITS: with wrong attributes\n", d->domain_id);
+        return -EINVAL;
+    }
+
+    p = __map_domain_page(page);
+    /* Offset within the mapped page */
+    offset = gpa & ~PAGE_MASK;
+
+    if ( is_write )
+        memcpy(p + offset, addr, size);
+    else
+        memcpy(addr, p + offset, size);
+
+    unmap_domain_page(p);
+    put_page(page);
+
+    return 0;
 }
 
 /*
