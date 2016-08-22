@@ -109,6 +109,8 @@ struct arch_domain
         } *rdist_regions;
         int nr_regions;                     /* Number of rdist regions */
         uint32_t rdist_stride;              /* Re-Distributor stride */
+        unsigned long long int nr_lpis;
+        uint64_t rdist_propbase;
         struct rb_root its_devices;         /* Devices mapped to an ITS */
         spinlock_t its_devices_lock;        /* Protects the its_devices tree */
         struct radix_tree_root pend_lpi_tree; /* Stores struct pending_irq's */
@@ -256,7 +258,9 @@ struct arch_vcpu
 
         /* GICv3: redistributor base and flags for this vCPU */
         paddr_t rdist_base;
-#define VGIC_V3_RDIST_LAST  (1 << 0)        /* last vCPU of the rdist */
+        uint64_t rdist_pendbase;
+#define VGIC_V3_RDIST_LAST      (1 << 0)        /* last vCPU of the rdist */
+#define VGIC_V3_LPIS_ENABLED    (1 << 1)
         uint8_t flags;
     } vgic;
 
