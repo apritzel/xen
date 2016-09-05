@@ -21,6 +21,8 @@
 #include <xen/lib.h>
 #include <xen/delay.h>
 #include <xen/mm.h>
+#include <xen/rbtree.h>
+#include <xen/sched.h>
 #include <xen/sizes.h>
 #include <asm/gic.h>
 #include <asm/gic_v3_defs.h>
@@ -35,6 +37,26 @@
  * firmware tables for all host ITSes, and only gets iterated afterwards.
  */
 LIST_HEAD(host_its_list);
+
+/*
+ * Describes a device which is using the ITS and is used by a guest.
+ * Since device IDs are per ITS (in contrast to vLPIs, which are per
+ * guest), we have to differentiate between different virtual ITSes.
+ * We use the doorbell address here, since this is a nice architectural
+ * property of MSIs in general and we can easily get to the base address
+ * of the ITS and look that up.
+ */
+struct its_devices {
+    struct rb_node rbnode;
+    struct host_its *hw_its;
+    void *itt_addr;
+    paddr_t guest_doorbell;             /* Identifies the virtual ITS */
+    uint32_t host_devid;
+    uint32_t guest_devid;
+    uint32_t eventids;                  /* Number of event IDs (MSIs) */
+    uint32_t *host_lpi_blocks;          /* Which LPIs are used on the host */
+    struct pending_irq *pend_irqs;      /* One struct per event */
+};
 
 bool gicv3_its_host_has_its(void)
 {
@@ -180,6 +202,30 @@ static int its_send_cmd_mapc(struct host_its *its, uint32_t collection_id,
     cmd[1] = 0x00;
     cmd[2] = encode_rdbase(its, cpu, collection_id);
     cmd[2] |= GITS_VALID_BIT;
+    cmd[3] = 0x00;
+
+    return its_send_command(its, cmd);
+}
+
+static int its_send_cmd_mapd(struct host_its *its, uint32_t deviceid,
+                             uint8_t size_bits, paddr_t itt_addr, bool valid)
+{
+    uint64_t cmd[4];
+
+    if ( valid )
+    {
+        ASSERT(size_bits <= its->evid_bits);
+        ASSERT(size_bits > 0);
+        ASSERT(!(itt_addr & ~GENMASK_ULL(51, 8)));
+
+        /* The number of events is encoded as "number of bits minus one". */
+        size_bits--;
+    }
+    cmd[0] = GITS_CMD_MAPD | ((uint64_t)deviceid << 32);
+    cmd[1] = size_bits;
+    cmd[2] = itt_addr;
+    if ( valid )
+        cmd[2] |= GITS_VALID_BIT;
     cmd[3] = 0x00;
 
     return its_send_command(its, cmd);
@@ -477,6 +523,66 @@ int gicv3_its_init(void)
     return 0;
 }
 
+static int remove_mapped_guest_device(struct its_devices *dev)
+{
+    int ret = 0;
+    unsigned int i;
+
+    if ( dev->hw_its )
+        /* MAPD also discards all events with this device ID. */
+        ret = its_send_cmd_mapd(dev->hw_its, dev->host_devid, 0, 0, false);
+
+    for ( i = 0; i < dev->eventids / LPI_BLOCK; i++ )
+        gicv3_free_host_lpi_block(dev->host_lpi_blocks[i]);
+
+    /* Make sure the MAPD command above is really executed. */
+    if ( !ret )
+        ret = gicv3_its_wait_commands(dev->hw_its);
+
+    /* This should never happen, but just in case ... */
+    if ( ret )
+        printk(XENLOG_WARNING "Can't unmap host ITS device 0x%x\n",
+               dev->host_devid);
+
+    xfree(dev->itt_addr);
+    xfree(dev->pend_irqs);
+    xfree(dev->host_lpi_blocks);
+    xfree(dev);
+
+    return 0;
+}
+
+static struct host_its *gicv3_its_find_by_doorbell(paddr_t doorbell_address)
+{
+    struct host_its *hw_its;
+
+    list_for_each_entry(hw_its, &host_its_list, entry)
+    {
+        if ( hw_its->addr + ITS_DOORBELL_OFFSET == doorbell_address )
+            return hw_its;
+    }
+
+    return NULL;
+}
+
+static int compare_its_guest_devices(struct its_devices *dev,
+                                     paddr_t vdoorbell, uint32_t vdevid)
+{
+    if ( dev->guest_doorbell < vdoorbell )
+        return -1;
+
+    if ( dev->guest_doorbell > vdoorbell )
+        return 1;
+
+    if ( dev->guest_devid < vdevid )
+        return -1;
+
+    if ( dev->guest_devid > vdevid )
+        return 1;
+
+    return 0;
+}
+
 /*
  * On the host ITS @its, map @nr_events consecutive LPIs.
  * The mapping connects a device @devid and event @eventid pair to LPI @lpi,
@@ -508,6 +614,163 @@ static int gicv3_its_map_host_events(struct host_its *its,
         return ret;
 
     return gicv3_its_wait_commands(its);
+}
+
+/*
+ * Map a hardware device, identified by a certain host ITS and its device ID
+ * to domain d, a guest ITS (identified by its doorbell address) and device ID.
+ * Also provide the number of events (MSIs) needed for that device.
+ * This does not check if this particular hardware device is already mapped
+ * at another domain, it is expected that this would be done by the caller.
+ */
+int gicv3_its_map_guest_device(struct domain *d,
+                               paddr_t host_doorbell, uint32_t host_devid,
+                               paddr_t guest_doorbell, uint32_t guest_devid,
+                               uint32_t nr_events, bool valid)
+{
+    void *itt_addr = NULL;
+    struct host_its *hw_its;
+    struct its_devices *dev = NULL;
+    struct rb_node **new = &d->arch.vgic.its_devices.rb_node, *parent = NULL;
+    unsigned int i;
+    int ret = -ENOENT;
+
+    hw_its = gicv3_its_find_by_doorbell(host_doorbell);
+    if ( !hw_its )
+        return ret;
+
+    /* Sanitise the provided hardware values against the host ITS. */
+    if ( host_devid >= BIT(hw_its->devid_bits) )
+        return -EINVAL;
+
+    /* We allocate events and LPIs in chunks of LPI_BLOCK (=32). */
+    nr_events = ROUNDUP(nr_events, LPI_BLOCK);
+    if ( nr_events >= BIT(hw_its->evid_bits) )
+        return -EINVAL;
+
+    /* check for already existing mappings */
+    spin_lock(&d->arch.vgic.its_devices_lock);
+    while ( *new )
+    {
+        struct its_devices *temp;
+        int cmp;
+
+        temp = rb_entry(*new, struct its_devices, rbnode);
+
+        parent = *new;
+        cmp = compare_its_guest_devices(temp, guest_doorbell, guest_devid);
+        if ( !cmp )
+        {
+            if ( !valid )
+                rb_erase(&temp->rbnode, &d->arch.vgic.its_devices);
+
+            spin_unlock(&d->arch.vgic.its_devices_lock);
+
+            if ( valid )
+            {
+                printk(XENLOG_G_WARNING "d%d tried to remap guest ITS device 0x%x to host device 0x%x\n",
+                        d->domain_id, guest_devid, host_devid);
+                return -EBUSY;
+            }
+
+            return remove_mapped_guest_device(temp);
+        }
+
+        if ( cmp > 0 )
+            new = &((*new)->rb_left);
+        else
+            new = &((*new)->rb_right);
+    }
+
+    if ( !valid )
+        goto out_unlock;
+
+    ret = -ENOMEM;
+
+    /* An Interrupt Translation Table needs to be 256-byte aligned. */
+    itt_addr = _xzalloc(nr_events * hw_its->itte_size, 256);
+    if ( !itt_addr )
+        goto out_unlock;
+
+    dev = xzalloc(struct its_devices);
+    if ( !dev )
+        goto out_unlock;
+
+    /*
+     * Allocate the pending_irqs for each virtual LPI. They will be put
+     * into the domain's radix tree upon the guest's MAPTI command.
+     */
+    dev->pend_irqs = xzalloc_array(struct pending_irq, nr_events);
+    if ( !dev->pend_irqs )
+        goto out_unlock;
+
+    dev->host_lpi_blocks = xzalloc_array(uint32_t, nr_events);
+    if ( !dev->host_lpi_blocks )
+        goto out_unlock;
+
+    ret = its_send_cmd_mapd(hw_its, host_devid, fls(nr_events - 1),
+                            virt_to_maddr(itt_addr), true);
+    if ( ret )
+        goto out_unlock;
+
+    dev->itt_addr = itt_addr;
+    dev->hw_its = hw_its;
+    dev->guest_doorbell = guest_doorbell;
+    dev->guest_devid = guest_devid;
+    dev->host_devid = host_devid;
+    dev->eventids = nr_events;
+
+    rb_link_node(&dev->rbnode, parent, new);
+    rb_insert_color(&dev->rbnode, &d->arch.vgic.its_devices);
+
+    spin_unlock(&d->arch.vgic.its_devices_lock);
+
+    /*
+     * Map all host LPIs within this device already. We can't afford to queue
+     * any host ITS commands later on during the guest's runtime.
+     */
+    for ( i = 0; i < nr_events / LPI_BLOCK; i++ )
+    {
+        ret = gicv3_allocate_host_lpi_block(d, &dev->host_lpi_blocks[i]);
+        if ( ret < 0 )
+            break;
+
+        ret = gicv3_its_map_host_events(hw_its, host_devid, i * LPI_BLOCK,
+                                        dev->host_lpi_blocks[i], LPI_BLOCK);
+        if ( ret < 0 )
+            break;
+    }
+
+    if ( ret )
+    {
+        do {
+            i--;
+            gicv3_free_host_lpi_block(dev->host_lpi_blocks[i]);
+            if ( i == 0 )
+                break;
+        } while (1);
+
+        /* Unmapping the device will discard all LPIs mapped so far. */
+        its_send_cmd_mapd(hw_its, host_devid, 1, 0, false);
+
+        goto out;
+    }
+
+    return 0;
+
+out_unlock:
+    spin_unlock(&d->arch.vgic.its_devices_lock);
+
+out:
+    if ( dev )
+    {
+        xfree(dev->pend_irqs);
+        xfree(dev->host_lpi_blocks);
+    }
+    xfree(itt_addr);
+    xfree(dev);
+
+    return ret;
 }
 
 /* Scan the DT for any ITS nodes and create a list of host ITSes out of it. */
