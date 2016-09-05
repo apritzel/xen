@@ -157,6 +157,20 @@ static int its_send_cmd_sync(struct host_its *its, unsigned int cpu)
     return its_send_command(its, cmd);
 }
 
+static int its_send_cmd_mapti(struct host_its *its,
+                              uint32_t deviceid, uint32_t eventid,
+                              uint32_t pintid, uint16_t icid)
+{
+    uint64_t cmd[4];
+
+    cmd[0] = GITS_CMD_MAPTI | ((uint64_t)deviceid << 32);
+    cmd[1] = eventid | ((uint64_t)pintid << 32);
+    cmd[2] = icid;
+    cmd[3] = 0x00;
+
+    return its_send_command(its, cmd);
+}
+
 static int its_send_cmd_mapc(struct host_its *its, uint32_t collection_id,
                              unsigned int cpu)
 {
@@ -166,6 +180,19 @@ static int its_send_cmd_mapc(struct host_its *its, uint32_t collection_id,
     cmd[1] = 0x00;
     cmd[2] = encode_rdbase(its, cpu, collection_id);
     cmd[2] |= GITS_VALID_BIT;
+    cmd[3] = 0x00;
+
+    return its_send_command(its, cmd);
+}
+
+static int its_send_cmd_inv(struct host_its *its,
+                            uint32_t deviceid, uint32_t eventid)
+{
+    uint64_t cmd[4];
+
+    cmd[0] = GITS_CMD_INV | ((uint64_t)deviceid << 32);
+    cmd[1] = eventid;
+    cmd[2] = 0x00;
     cmd[3] = 0x00;
 
     return its_send_command(its, cmd);
@@ -448,6 +475,39 @@ int gicv3_its_init(void)
     }
 
     return 0;
+}
+
+/*
+ * On the host ITS @its, map @nr_events consecutive LPIs.
+ * The mapping connects a device @devid and event @eventid pair to LPI @lpi,
+ * increasing both @eventid and @lpi to cover the number of requested LPIs.
+ */
+static int gicv3_its_map_host_events(struct host_its *its,
+                                     uint32_t devid, uint32_t eventid,
+                                     uint32_t lpi, uint32_t nr_events)
+{
+    uint32_t i;
+    int ret;
+
+    for ( i = 0; i < nr_events; i++ )
+    {
+        /* For now we map every host LPI to host CPU 0 */
+        ret = its_send_cmd_mapti(its, devid, eventid + i, lpi + i, 0);
+        if ( ret )
+            return ret;
+
+        ret = its_send_cmd_inv(its, devid, eventid + i);
+        if ( ret )
+            return ret;
+    }
+
+    /* TODO: Consider using INVALL here. Didn't work on the model, though. */
+
+    ret = its_send_cmd_sync(its, 0);
+    if ( ret )
+        return ret;
+
+    return gicv3_its_wait_commands(its);
 }
 
 /* Scan the DT for any ITS nodes and create a list of host ITSes out of it. */
