@@ -133,6 +133,48 @@ uint64_t gicv3_get_redist_address(unsigned int cpu, bool use_pta)
         return per_cpu(lpi_redist, cpu).redist_id << 16;
 }
 
+/*
+ * Handle incoming LPIs, which are a bit special, because they are potentially
+ * numerous and also only get injected into guests. Treat them specially here,
+ * by just looking up their target vCPU and virtual LPI number and hand it
+ * over to the injection function.
+ */
+void gicv3_do_LPI(unsigned int lpi)
+{
+    struct domain *d;
+    union host_lpi *hlpip, hlpi;
+    struct vcpu *vcpu;
+
+    WRITE_SYSREG32(lpi, ICC_EOIR1_EL1);
+
+    hlpip = gic_get_host_lpi(lpi);
+    if ( !hlpip )
+        return;
+
+    hlpi.data = read_u64_atomic(&hlpip->data);
+
+    /* Unmapped events are marked with an invalid LPI ID. */
+    if ( hlpi.virt_lpi == INVALID_LPI )
+        return;
+
+    d = rcu_lock_domain_by_id(hlpi.dom_id);
+    if ( !d )
+        return;
+
+    /* Make sure we don't step beyond the vcpu array. */
+    if ( hlpi.vcpu_id >= d->max_vcpus )
+    {
+        rcu_unlock_domain(d);
+        return;
+    }
+
+    vcpu = d->vcpu[hlpi.vcpu_id];
+
+    vgic_vcpu_inject_irq(vcpu, hlpi.virt_lpi);
+
+    rcu_unlock_domain(d);
+}
+
 static int gicv3_lpi_allocate_pendtable(uint64_t *reg)
 {
     uint64_t val;

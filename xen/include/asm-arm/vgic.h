@@ -66,12 +66,14 @@ struct pending_irq
 #define GIC_IRQ_GUEST_VISIBLE  2
 #define GIC_IRQ_GUEST_ENABLED  3
 #define GIC_IRQ_GUEST_MIGRATING   4
+#define GIC_IRQ_GUEST_LPI_PENDING 5     /* Caches the pending bit of an LPI. */
     unsigned long status;
     struct irq_desc *desc; /* only set it the irq corresponds to a physical irq */
     unsigned int irq;
 #define GIC_INVALID_LR         (uint8_t)~0
     uint8_t lr;
     uint8_t priority;
+    uint8_t lpi_priority;       /* Caches the priority if this is an LPI. */
     /* inflight is used to append instances of pending_irq to
      * vgic.inflight_irqs */
     struct list_head inflight;
@@ -136,6 +138,7 @@ struct vgic_ops {
     bool (*emulate_reg)(struct cpu_user_regs *regs, union hsr hsr);
     /* lookup the struct pending_irq for a given LPI interrupt */
     struct pending_irq *(*lpi_to_pending)(struct domain *d, unsigned int vlpi);
+    int (*lpi_get_priority)(struct domain *d, uint32_t vlpi);
     /* Maximum number of vCPU supported */
     const unsigned int max_vcpus;
 };
