@@ -226,10 +226,15 @@ struct vcpu *vgic_get_target_vcpu(struct vcpu *v, unsigned int virq)
 
 static int vgic_get_virq_priority(struct vcpu *v, unsigned int virq)
 {
-    struct vgic_irq_rank *rank = vgic_rank_irq(v, virq);
+    struct vgic_irq_rank *rank;
     unsigned long flags;
     int priority;
 
+    /* LPIs don't have a rank, also store their priority separately. */
+    if ( is_lpi(virq) )
+        return v->domain->arch.vgic.handler->lpi_get_priority(v->domain, virq);
+
+    rank = vgic_rank_irq(v, virq);
     vgic_lock_rank(v, rank, flags);
     priority = rank->priority[virq & INTERRUPT_RANK_MASK];
     vgic_unlock_rank(v, rank, flags);
