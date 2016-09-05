@@ -5,10 +5,13 @@
 /*
  * Create a contiguous bitmask starting at bit position @l and ending at
  * position @h. For example
- * GENMASK(30, 21) gives us the 32bit vector 0x01fe00000.
+ * GENMASK(30, 21) gives us the 32bit vector 0x7fe00000.
  */
 #define GENMASK(h, l) \
     (((~0UL) << (l)) & (~0UL >> (BITS_PER_LONG - 1 - (h))))
+
+#define GENMASK_ULL(h, l) \
+    (((~0ULL) << (l)) & (~0ULL >> (BITS_PER_LONG_LONG - 1 - (h))))
 
 /*
  * ffs: find first bit set. This is defined the same way as
