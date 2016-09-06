@@ -469,6 +469,55 @@ static int its_handle_inv(struct virt_its *its, uint64_t *cmdptr)
     return 0;
 }
 
+/*
+ * INVALL updates the per-LPI configuration status for every LPI mapped to
+ * a particular redistributor.
+ * We iterate over all mapped LPIs in our radix tree and update those.
+ */
+static int its_handle_invall(struct virt_its *its, uint64_t *cmdptr)
+{
+    uint32_t collid = its_cmd_get_collection(cmdptr);
+    struct vcpu *vcpu;
+    struct pending_irq *pirqs[16];
+    uint64_t vlpi = 0;          /* 64-bit to catch overflows */
+    unsigned int nr_lpis, i;
+    int ret = -1;
+
+    /* We may want to revisit this implementation for DomUs. */
+    ASSERT(is_hardware_domain(its->d));
+
+    spin_lock(&its->its_lock);
+    vcpu = get_vcpu_from_collection(its, collid);
+    spin_unlock(&its->its_lock);
+
+    read_lock(&its->d->arch.vgic.pend_lpi_tree_lock);
+
+    do
+    {
+        nr_lpis = radix_tree_gang_lookup(&its->d->arch.vgic.pend_lpi_tree,
+                                         (void **)pirqs, vlpi,
+                                         ARRAY_SIZE(pirqs));
+
+        for ( i = 0; i < nr_lpis; i++ )
+        {
+            if ( pirqs[i]->vcpu_id != vcpu->vcpu_id )
+                continue;
+
+            vlpi = pirqs[i]->irq;
+            if ( update_lpi_enabled_status(its->d, vcpu, vlpi) )
+                goto out_unlock;
+        }
+    } while ( (++vlpi < its->d->arch.vgic.nr_lpis) &&
+              (nr_lpis == ARRAY_SIZE(pirqs)) );
+
+    ret = 0;
+
+out_unlock:
+    read_unlock(&its->d->arch.vgic.pend_lpi_tree_lock);
+
+    return ret;
+}
+
 static int its_handle_mapc(struct virt_its *its, uint64_t *cmdptr)
 {
     uint32_t collid = its_cmd_get_collection(cmdptr);
@@ -709,6 +758,9 @@ static int vgic_its_handle_cmds(struct domain *d, struct virt_its *its)
             break;
         case GITS_CMD_INV:
             ret = its_handle_inv(its, command);
+            break;
+        case GITS_CMD_INVALL:
+            ret = its_handle_invall(its, command);
             break;
         case GITS_CMD_MAPC:
             ret = its_handle_mapc(its, command);
