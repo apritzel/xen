@@ -469,6 +469,65 @@ static int its_handle_inv(struct virt_its *its, uint64_t *cmdptr)
     return 0;
 }
 
+/*
+ * INVALL updates the per-LPI configuration status for every LPI mapped to
+ * a particular redistributor.
+ * We iterate over all mapped LPIs in our radix tree and update those.
+ */
+static int its_handle_invall(struct virt_its *its, uint64_t *cmdptr)
+{
+    uint32_t collid = its_cmd_get_collection(cmdptr);
+    struct vcpu *vcpu;
+    struct pending_irq *pirqs[16];
+    uint64_t vlpi = 0;          /* 64-bit to catch overflows */
+    unsigned int nr_lpis, i;
+    int ret = 0;
+
+    /*
+     * As this implementation walks over all mapped LPIs, it might take
+     * too long for a real guest, so we might want to revisit this
+     * implementation for DomUs.
+     * However this command is very rare, also we don't expect many
+     * LPIs to be actually mapped, so it's fine for Dom0 to use.
+     */
+    ASSERT(is_hardware_domain(its->d));
+
+    spin_lock(&its->its_lock);
+    vcpu = get_vcpu_from_collection(its, collid);
+    spin_unlock(&its->its_lock);
+
+    read_lock(&its->d->arch.vgic.pend_lpi_tree_lock);
+
+    do
+    {
+        nr_lpis = radix_tree_gang_lookup(&its->d->arch.vgic.pend_lpi_tree,
+                                         (void **)pirqs, vlpi,
+                                         ARRAY_SIZE(pirqs));
+
+        for ( i = 0; i < nr_lpis; i++ )
+        {
+            /* We only care about LPIs on our VCPU. */
+            if ( pirqs[i]->vcpu_id != vcpu->vcpu_id )
+                continue;
+
+            vlpi = pirqs[i]->irq;
+            /* If that fails for a single LPI, carry on to handle the rest. */
+            if ( update_lpi_enabled_status(its->d, vcpu, vlpi) )
+                ret = -1;
+        }
+    /*
+     * Loop over the next gang of pending_irqs until we reached the end of
+     * a (fully populated) tree or the lookup function returns less LPIs than
+     * it has been asked for.
+     */
+    } while ( (++vlpi < its->d->arch.vgic.nr_lpis) &&
+              (nr_lpis == ARRAY_SIZE(pirqs)) );
+
+    read_unlock(&its->d->arch.vgic.pend_lpi_tree_lock);
+
+    return ret;
+}
+
 static int its_handle_mapc(struct virt_its *its, uint64_t *cmdptr)
 {
     uint32_t collid = its_cmd_get_collection(cmdptr);
@@ -710,6 +769,9 @@ static int vgic_its_handle_cmds(struct domain *d, struct virt_its *its)
             break;
         case GITS_CMD_INV:
             ret = its_handle_inv(its, command);
+            break;
+        case GITS_CMD_INVALL:
+            ret = its_handle_invall(its, command);
             break;
         case GITS_CMD_MAPC:
             ret = its_handle_mapc(its, command);
