@@ -376,6 +376,99 @@ static int its_handle_int(struct virt_its *its, uint64_t *cmdptr)
     return 0;
 }
 
+/*
+ * For a given virtual LPI read the enabled bit and priority from the virtual
+ * property table and update the virtual IRQ's state in the given pending_irq.
+ */
+static int update_lpi_property(struct domain *d, uint32_t vlpi,
+                               struct pending_irq *p)
+{
+    paddr_t addr;
+    uint8_t property;
+    int ret;
+
+    addr = d->arch.vgic.rdist_propbase & GENMASK_ULL(51, 12);
+
+    ret = vgic_access_guest_memory(d, addr + vlpi - LPI_OFFSET,
+                                   &property, sizeof(property), false);
+    if ( ret )
+        return ret;
+
+    p->lpi_priority = property & LPI_PROP_PRIO_MASK;
+    if ( property & LPI_PROP_ENABLED )
+        set_bit(GIC_IRQ_GUEST_ENABLED, &p->status);
+    else
+        clear_bit(GIC_IRQ_GUEST_ENABLED, &p->status);
+
+    return 0;
+}
+
+/*
+ * For a given virtual LPI read the enabled bit and priority from the virtual
+ * property table and update the virtual IRQ's state.
+ * This takes care of removing or pushing of virtual LPIs to their VCPUs.
+ * Also check if this LPI is due to be injected and do it, if needed.
+ */
+static int update_lpi_enabled_status(struct domain *d,
+                                     struct vcpu *vcpu, uint32_t vlpi)
+{
+    struct pending_irq *p = d->arch.vgic.handler->lpi_to_pending(d, vlpi);
+    unsigned long flags;
+    int ret;
+
+    if ( !p )
+        return -EINVAL;
+
+    spin_lock_irqsave(&vcpu->arch.vgic.lock, flags);
+    ret = update_lpi_property(d, vlpi, p);
+    if ( ret ) {
+        spin_unlock_irqrestore(&vcpu->arch.vgic.lock, flags);
+        return ret;
+    }
+
+    if ( test_bit(GIC_IRQ_GUEST_ENABLED, &p->status) )
+    {
+        if ( !list_empty(&p->inflight) &&
+             !test_bit(GIC_IRQ_GUEST_VISIBLE, &p->status) )
+            gic_raise_guest_irq(vcpu, vlpi, p->lpi_priority);
+        spin_unlock_irqrestore(&vcpu->arch.vgic.lock, flags);
+
+        /* Check whether the LPI has fired while the guest had it disabled. */
+        if ( test_and_clear_bit(GIC_IRQ_GUEST_LPI_PENDING, &p->status) )
+            vgic_vcpu_inject_irq(vcpu, vlpi);
+    }
+    else
+    {
+        clear_bit(GIC_IRQ_GUEST_ENABLED, &p->status);
+        spin_unlock_irqrestore(&vcpu->arch.vgic.lock, flags);
+
+        gic_remove_from_queues(vcpu, vlpi);
+    }
+
+    return 0;
+}
+
+static int its_handle_inv(struct virt_its *its, uint64_t *cmdptr)
+{
+    uint32_t devid = its_cmd_get_deviceid(cmdptr);
+    uint32_t eventid = its_cmd_get_id(cmdptr);
+    struct vcpu *vcpu;
+    uint32_t vlpi;
+
+    /* Translate the event into a vCPU/vLPI pair. */
+    if ( !read_itte(its, devid, eventid, &vcpu, &vlpi) )
+        return -1;
+
+    /*
+     * Now read the property table and update our cached status. This
+     * also takes care if this LPI now needs to be injected or removed.
+     */
+    if ( update_lpi_enabled_status(its->d, vcpu, vlpi) )
+        return -1;
+
+    return 0;
+}
+
 static int its_handle_mapc(struct virt_its *its, uint64_t *cmdptr)
 {
     uint32_t collid = its_cmd_get_collection(cmdptr);
@@ -614,6 +707,9 @@ static int vgic_its_handle_cmds(struct domain *d, struct virt_its *its)
             break;
         case GITS_CMD_INT:
             ret = its_handle_int(its, command);
+            break;
+        case GITS_CMD_INV:
+            ret = its_handle_inv(its, command);
             break;
         case GITS_CMD_MAPC:
             ret = its_handle_mapc(its, command);
