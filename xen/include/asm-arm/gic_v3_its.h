@@ -161,6 +161,10 @@ int gicv3_its_setup_collection(unsigned int cpu);
 void vgic_v3_its_init_domain(struct domain *d);
 void vgic_v3_its_free_domain(struct domain *d);
 
+/* Create and register a virtual ITS at the given guest address. */
+int vgic_v3_its_init_virtual(struct domain *d, paddr_t guest_addr,
+			     unsigned int devid_bits, unsigned int intid_bits);
+
 /*
  * Map a device on the host by allocating an ITT on the host (ITS).
  * "nr_event" specifies how many events (interrupts) this device will need.
@@ -235,6 +239,14 @@ void vgic_v3_its_init_domain(struct domain *d)
 
 void vgic_v3_its_free_domain(struct domain *d)
 {
+}
+
+static inline int vgic_v3_its_init_virtual(struct domain *d,
+                                           paddr_t guest_addr,
+                                           unsigned int devid_bits,
+                                           unsigned int intid_bits)
+{
+    return 0;
 }
 
 #endif /* CONFIG_HAS_ITS */
