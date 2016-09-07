@@ -234,6 +234,21 @@ void gicv3_lpi_update_host_entry(uint32_t host_lpi, int domain_id,
     write_u64_atomic(&hlpip->data, hlpi.data);
 }
 
+int gicv3_lpi_update_host_vcpuid(uint32_t host_lpi, unsigned int vcpu_id)
+{
+    union host_lpi *hlpip;
+
+    ASSERT(host_lpi >= LPI_OFFSET);
+
+    host_lpi -= LPI_OFFSET;
+
+    hlpip = &lpi_data.host_lpis[host_lpi / HOST_LPIS_PER_PAGE][host_lpi % HOST_LPIS_PER_PAGE];
+
+    write_u16_atomic(&hlpip->vcpu_id, vcpu_id);
+
+    return 0;
+}
+
 static int gicv3_lpi_allocate_pendtable(uint64_t *reg)
 {
     uint64_t val;

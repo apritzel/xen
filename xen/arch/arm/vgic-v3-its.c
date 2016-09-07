@@ -508,6 +508,47 @@ static int its_handle_mapti(struct virt_its *its, uint64_t *cmdptr)
     return 0;
 }
 
+static int its_handle_movi(struct virt_its *its, uint64_t *cmdptr)
+{
+    uint32_t devid = its_cmd_get_deviceid(cmdptr);
+    uint32_t eventid = its_cmd_get_id(cmdptr);
+    int collid = its_cmd_get_collection(cmdptr);
+    struct pending_irq *p;
+    struct vcpu *vcpu;
+    uint32_t vlpi;
+    int ret = -1;
+
+    spin_lock(&its->its_lock);
+    /* Check for a mapped LPI and get the LPI number. */
+    if ( !read_itte_locked(its, devid, eventid, &vcpu, &vlpi) )
+        goto out_unlock;
+
+    /* Check the new collection ID and get the new VCPU pointer */
+    vcpu = get_vcpu_from_collection(its, collid);
+    if ( !vcpu )
+        goto out_unlock;
+
+    /* Update our cached vcpu_id in the pending_irq. */
+    p = its->d->arch.vgic.handler->lpi_to_pending(its->d, vlpi);
+    p->vcpu_id = vcpu->vcpu_id;
+
+    /* Now store the new collection in the translation table. */
+    if ( !write_itte_locked(its, devid, eventid, collid, vlpi, &vcpu) )
+        goto out_unlock;
+
+    spin_unlock(&its->its_lock);
+
+    /* TODO: lookup currently-in-guest virtual IRQs and migrate them? */
+
+    return gicv3_lpi_change_vcpu(its->d, its->doorbell_address,
+                                 devid, eventid, vcpu->vcpu_id);
+
+out_unlock:
+    spin_unlock(&its->its_lock);
+
+    return ret;
+}
+
 #define ITS_CMD_BUFFER_SIZE(baser)      ((((baser) & 0xff) + 1) << 12)
 
 /*
@@ -551,6 +592,12 @@ static int vgic_its_handle_cmds(struct domain *d, struct virt_its *its)
         case GITS_CMD_MAPI:
         case GITS_CMD_MAPTI:
             ret = its_handle_mapti(its, command);
+            break;
+        case GITS_CMD_MOVALL:
+            gdprintk(XENLOG_G_INFO, "ITS: ignoring MOVALL command\n");
+            break;
+        case GITS_CMD_MOVI:
+            ret = its_handle_movi(its, command);
             break;
         case GITS_CMD_SYNC:
             /* We handle ITS commands synchronously, so we ignore SYNC. */
