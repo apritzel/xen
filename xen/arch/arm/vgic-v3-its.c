@@ -319,6 +319,33 @@ static int its_handle_clear(struct virt_its *its, uint64_t *cmdptr)
     return 0;
 }
 
+static int its_handle_int(struct virt_its *its, uint64_t *cmdptr)
+{
+    uint32_t devid = its_cmd_get_deviceid(cmdptr);
+    uint32_t eventid = its_cmd_get_id(cmdptr);
+    struct pending_irq *p;
+    struct vcpu *vcpu;
+    uint32_t vlpi;
+
+    if ( !read_itte(its, devid, eventid, &vcpu, &vlpi) )
+        return -1;
+
+    p = its->d->arch.vgic.handler->lpi_to_pending(its->d, vlpi);
+    if ( !p )
+        return -1;
+
+    /*
+     * If the LPI is enabled, inject it.
+     * If not, store the pending state to inject it once it gets enabled later.
+     */
+    if ( test_bit(GIC_IRQ_GUEST_ENABLED, &p->status) )
+        vgic_vcpu_inject_irq(vcpu, vlpi);
+    else
+        set_bit(GIC_IRQ_GUEST_LPI_PENDING, &p->status);
+
+    return 0;
+}
+
 #define ITS_CMD_BUFFER_SIZE(baser)      ((((baser) & 0xff) + 1) << 12)
 
 /*
@@ -349,6 +376,9 @@ static int vgic_its_handle_cmds(struct domain *d, struct virt_its *its)
         {
         case GITS_CMD_CLEAR:
             ret = its_handle_clear(its, command);
+            break;
+        case GITS_CMD_INT:
+            ret = its_handle_int(its, command);
             break;
         case GITS_CMD_SYNC:
             /* We handle ITS commands synchronously, so we ignore SYNC. */
