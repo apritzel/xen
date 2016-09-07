@@ -30,6 +30,7 @@
 #include <asm/current.h>
 #include <asm/mmio.h>
 #include <asm/gic_v3_defs.h>
+#include <asm/gic_v3_its.h>
 #include <asm/vgic.h>
 #include <asm/vgic-emul.h>
 #include <asm/vreg.h>
@@ -1569,6 +1570,7 @@ static int vgic_v3_domain_init(struct domain *d)
      */
     if ( is_hardware_domain(d) )
     {
+        struct host_its *hw_its;
         unsigned int first_cpu = 0;
 
         d->arch.vgic.dbase = vgic_v3_hw.dbase;
@@ -1594,6 +1596,21 @@ static int vgic_v3_domain_init(struct domain *d)
 
             first_cpu += size / d->arch.vgic.rdist_stride;
         }
+        d->arch.vgic.nr_regions = vgic_v3_hw.nr_rdist_regions;
+
+        list_for_each_entry(hw_its, &host_its_list, entry)
+        {
+            /*
+             * For each host ITS create a virtual ITS using the same
+             * base and thus doorbell address.
+             * Use the same number of device ID bits as the host, and
+             * allow 24 bits for the interrupt ID.
+             */
+            vgic_v3_its_init_virtual(d, hw_its->addr, hw_its->devid_bits, 24);
+
+            d->arch.vgic.has_its = true;
+        }
+
     }
     else
     {
