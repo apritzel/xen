@@ -1449,6 +1449,8 @@ static int vgic_v3_domain_init(struct domain *d)
     d->arch.vgic.nr_regions = rdist_count;
     d->arch.vgic.rdist_regions = rdist_regions;
 
+    vgic_v3_its_init_domain(d);
+
     /*
      * Domain 0 gets the hardware address.
      * Guests get the virtual platform layout.
@@ -1521,6 +1523,7 @@ static int vgic_v3_domain_init(struct domain *d)
 
 static void vgic_v3_domain_free(struct domain *d)
 {
+    vgic_v3_its_free_domain(d);
     xfree(d->arch.vgic.rdist_regions);
 }
 

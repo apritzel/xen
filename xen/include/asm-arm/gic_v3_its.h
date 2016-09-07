@@ -149,6 +149,10 @@ uint64_t gicv3_get_redist_address(unsigned int cpu, bool use_pta);
 /* Map a collection for this host CPU to each host ITS. */
 int gicv3_its_setup_collection(unsigned int cpu);
 
+/* Initialize and destroy the per-domain parts of the virtual ITS support. */
+void vgic_v3_its_init_domain(struct domain *d);
+void vgic_v3_its_free_domain(struct domain *d);
+
 int gicv3_allocate_host_lpi_block(struct domain *d, uint32_t *first_lpi);
 void gicv3_free_host_lpi_block(uint32_t first_lpi);
 
@@ -189,6 +193,14 @@ static inline int gicv3_its_setup_collection(unsigned int cpu)
 {
     /* We should never get here without an ITS. */
     BUG();
+}
+
+void vgic_v3_its_init_domain(struct domain *d)
+{
+}
+
+void vgic_v3_its_free_domain(struct domain *d)
+{
 }
 
 #endif /* CONFIG_HAS_ITS */
