@@ -851,6 +851,30 @@ struct pending_irq *gicv3_assign_guest_event(struct domain *d,
     return pirq;
 }
 
+/* Changes the target VCPU for a given host LPI assigned to a domain. */
+int gicv3_lpi_change_vcpu(struct domain *d, paddr_t vdoorbell,
+                          uint32_t vdevid, uint32_t veventid,
+                          unsigned int vcpu_id)
+{
+    uint32_t host_lpi;
+    struct its_devices *dev;
+
+    spin_lock(&d->arch.vgic.its_devices_lock);
+    dev = get_its_device(d, vdoorbell, vdevid);
+    if ( dev )
+        host_lpi = get_host_lpi(dev, veventid);
+    else
+        host_lpi = 0;
+    spin_unlock(&d->arch.vgic.its_devices_lock);
+
+    if ( !host_lpi )
+        return -ENOENT;
+
+    gicv3_lpi_update_host_vcpuid(host_lpi, vcpu_id);
+
+    return 0;
+}
+
 /* Scan the DT for any ITS nodes and create a list of host ITSes out of it. */
 void gicv3_its_dt_init(const struct dt_device_node *node)
 {
