@@ -216,6 +216,24 @@ void gicv3_do_LPI(unsigned int lpi)
     rcu_unlock_domain(d);
 }
 
+void gicv3_lpi_update_host_entry(uint32_t host_lpi, int domain_id,
+                                 unsigned int vcpu_id, uint32_t virt_lpi)
+{
+    union host_lpi *hlpip, hlpi;
+
+    ASSERT(host_lpi >= LPI_OFFSET);
+
+    host_lpi -= LPI_OFFSET;
+
+    hlpip = &lpi_data.host_lpis[host_lpi / HOST_LPIS_PER_PAGE][host_lpi % HOST_LPIS_PER_PAGE];
+
+    hlpi.virt_lpi = virt_lpi;
+    hlpi.dom_id = domain_id;
+    hlpi.vcpu_id = vcpu_id;
+
+    write_u64_atomic(&hlpip->data, hlpi.data);
+}
+
 static int gicv3_lpi_allocate_pendtable(uint64_t *reg)
 {
     uint64_t val;

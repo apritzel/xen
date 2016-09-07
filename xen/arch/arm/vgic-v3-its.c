@@ -275,8 +275,8 @@ static bool write_itte_locked(struct virt_its *its, uint32_t devid,
  * This function takes care of the locking by taking the its_lock itself, so
  * a caller shall not hold this. Before returning, the lock is dropped again.
  */
-bool write_itte(struct virt_its *its, uint32_t devid, uint32_t evid,
-                uint32_t collid, uint32_t vlpi, struct vcpu **vcpu_ptr)
+static bool write_itte(struct virt_its *its, uint32_t devid, uint32_t evid,
+                       uint32_t collid, uint32_t vlpi, struct vcpu **vcpu_ptr)
 {
     bool ret;
 
@@ -440,6 +440,74 @@ static int its_handle_mapd(struct virt_its *its, uint64_t *cmdptr)
     return ret;
 }
 
+static int its_handle_mapti(struct virt_its *its, uint64_t *cmdptr)
+{
+    uint32_t devid = its_cmd_get_deviceid(cmdptr);
+    uint32_t eventid = its_cmd_get_id(cmdptr);
+    uint32_t intid = its_cmd_get_physical_id(cmdptr), _intid;
+    uint16_t collid = its_cmd_get_collection(cmdptr);
+    struct pending_irq *pirq;
+    struct vcpu *vcpu = NULL;
+    int ret = 0;
+
+    if ( its_cmd_get_command(cmdptr) == GITS_CMD_MAPI )
+        intid = eventid;
+
+    spin_lock(&its->its_lock);
+    /*
+     * Check whether there is a valid existing mapping. If yes, behavior is
+     * unpredictable, we choose to ignore this command here.
+     * This makes sure we start with a pristine pending_irq below.
+     */
+    if ( read_itte_locked(its, devid, eventid, &vcpu, &_intid) &&
+         _intid != INVALID_LPI )
+    {
+        spin_unlock(&its->its_lock);
+        return -1;
+    }
+
+    /* Enter the mapping in our virtual ITS tables. */
+    if ( !write_itte_locked(its, devid, eventid, collid, intid, &vcpu) )
+    {
+        spin_unlock(&its->its_lock);
+        return -1;
+    }
+
+    spin_unlock(&its->its_lock);
+
+    /*
+     * Connect this virtual LPI to the corresponding host LPI, which is
+     * determined by the same device ID and event ID on the host side.
+     * This returns us the corresponding, still unused pending_irq.
+     */
+    pirq = gicv3_assign_guest_event(its->d, its->doorbell_address,
+                                    devid, eventid, vcpu, intid);
+    if ( !pirq )
+        return -1;
+
+    vgic_init_pending_irq(pirq, intid);
+
+    /*
+     * Now read the guest's property table to initialize our cached state.
+     * It can't fire at this time, because it is not known to the host yet.
+     */
+    ret = update_lpi_property(its->d, intid, pirq);
+    if ( ret )
+        return ret;
+
+    pirq->vcpu_id = vcpu->vcpu_id;
+
+    /*
+     * Now insert the pending_irq into the domain's LPI tree, so that
+     * it becomes live.
+     */
+    write_lock(&its->d->arch.vgic.pend_lpi_tree_lock);
+    radix_tree_insert(&its->d->arch.vgic.pend_lpi_tree, intid, pirq);
+    write_unlock(&its->d->arch.vgic.pend_lpi_tree_lock);
+
+    return 0;
+}
+
 #define ITS_CMD_BUFFER_SIZE(baser)      ((((baser) & 0xff) + 1) << 12)
 
 /*
@@ -479,6 +547,10 @@ static int vgic_its_handle_cmds(struct domain *d, struct virt_its *its)
             break;
         case GITS_CMD_MAPD:
             ret = its_handle_mapd(its, command);
+            break;
+        case GITS_CMD_MAPI:
+        case GITS_CMD_MAPTI:
+            ret = its_handle_mapti(its, command);
             break;
         case GITS_CMD_SYNC:
             /* We handle ITS commands synchronously, so we ignore SYNC. */

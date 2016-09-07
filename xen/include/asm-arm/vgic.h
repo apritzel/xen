@@ -83,6 +83,7 @@ struct pending_irq
      * TODO: when implementing irq migration, taking only the current
      * vgic lock is not going to be enough. */
     struct list_head lr_queue;
+    uint16_t vcpu_id;          /* The VCPU for an LPI. */
 };
 
 #define NR_INTERRUPT_PER_RANK   32
@@ -303,6 +304,7 @@ extern struct vcpu *vgic_get_target_vcpu(struct vcpu *v, unsigned int virq);
 extern void vgic_vcpu_inject_irq(struct vcpu *v, unsigned int virq);
 extern void vgic_vcpu_inject_spi(struct domain *d, unsigned int virq);
 extern void vgic_clear_pending_irqs(struct vcpu *v);
+extern void vgic_init_pending_irq(struct pending_irq *p, unsigned int virq);
 extern struct pending_irq *irq_to_pending(struct vcpu *v, unsigned int irq);
 extern struct pending_irq *spi_to_pending(struct domain *d, unsigned int irq);
 extern struct vgic_irq_rank *vgic_rank_offset(struct vcpu *v, int b, int n, int s);
