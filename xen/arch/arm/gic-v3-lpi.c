@@ -133,6 +133,22 @@ uint64_t gicv3_get_redist_address(unsigned int cpu, bool use_pta)
         return per_cpu(lpi_redist, cpu).redist_id << 16;
 }
 
+static bool vgic_can_inject_lpi(struct vcpu *vcpu, uint32_t vlpi)
+{
+    struct pending_irq *p;
+
+    p = vcpu->domain->arch.vgic.handler->lpi_to_pending(vcpu->domain, vlpi);
+    if ( !p )
+        return false;
+
+    if ( test_bit(GIC_IRQ_GUEST_ENABLED, &p->status) )
+        return true;
+
+    set_bit(GIC_IRQ_GUEST_LPI_PENDING, &p->status);
+
+    return false;
+}
+
 /*
  * Handle incoming LPIs, which are a bit special, because they are potentially
  * numerous and also only get injected into guests. Treat them specially here,
@@ -170,7 +186,13 @@ void gicv3_do_LPI(unsigned int lpi)
 
     vcpu = d->vcpu[hlpi.vcpu_id];
 
-    vgic_vcpu_inject_irq(vcpu, hlpi.virt_lpi);
+    /*
+     * We keep all host LPIs enabled, so check if it's disabled on the guest
+     * side and just record this LPI in the virtual pending table in this case.
+     * The guest picks it up once it gets enabled again.
+     */
+    if ( vgic_can_inject_lpi(vcpu, hlpi.virt_lpi) )
+        vgic_vcpu_inject_irq(vcpu, hlpi.virt_lpi);
 
     rcu_unlock_domain(d);
 }
