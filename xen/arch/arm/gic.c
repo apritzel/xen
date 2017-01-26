@@ -491,6 +491,8 @@ static void gic_update_one_lr(struct vcpu *v, int i)
     {
         gic_hw_ops->clear_lr(i);
         clear_bit(i, &this_cpu(lr_mask));
+        if ( is_lpi(irq) )
+            clear_bit(GIC_IRQ_GUEST_LPI_PENDING, &p->status);
 
         if ( p->desc != NULL )
             clear_bit(_IRQ_INPROGRESS, &p->desc->status);
