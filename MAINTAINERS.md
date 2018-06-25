@@ -135,7 +135,7 @@ circumstances might include:
 Maintainers List (try to look for most precise areas first)
 
 		-----------------------------------
-
+```
 ACPI
 M:	Jan Beulich <jbeulich@suse.com>
 S:	Supported
@@ -143,13 +143,17 @@ F:	xen/arch/x86/acpi/
 F:	xen/drivers/acpi/
 F:	xen/include/acpi/
 F:	tools/libacpi/
+```
 
+```
 AMD IOMMU
 M:	Suravee Suthikulpanit <suravee.suthikulpanit@amd.com>
 R:	Brian Woods <brian.woods@amd.com>
 S:	Maintained
 F:	xen/drivers/passthrough/amd/
+```
 
+```
 AMD SVM
 M:	Boris Ostrovsky <boris.ostrovsky@oracle.com>
 M:	Suravee Suthikulpanit <suravee.suthikulpanit@amd.com>
@@ -157,14 +161,18 @@ R:	Brian Woods <brian.woods@amd.com>
 S:	Supported
 F:	xen/arch/x86/hvm/svm/
 F:	xen/arch/x86/cpu/vpmu_amd.c
+```
 
+```
 ARINC653 SCHEDULER
 M:	Josh Whitehead <josh.whitehead@dornerworks.com>
 M:	Robert VanVossen <robert.vanvossen@dornerworks.com>
 S:	Supported
 F:	xen/common/sched_arinc653.c
 F:	tools/libxc/xc_arinc653.c
+```
 
+```
 ARM (W/ VIRTUALISATION EXTENSIONS) ARCHITECTURE
 M:	Stefano Stabellini <sstabellini@kernel.org>
 M:	Julien Grall <julien.grall@arm.com>
@@ -183,11 +191,15 @@ F:	xen/drivers/passthrough/arm/
 F:	xen/include/asm-arm/
 F:	xen/include/public/arch-arm/
 F:	xen/include/public/arch-arm.h
+```
 
+```
 BLKTAP2
 S:	Orphaned
 F:	tools/blktap2/
+```
 
+```
 Continuous Integration (CI)
 M:	Doug Goldstein <cardoe@cardoe.com>
 W:	https://gitlab.com/xen-project/xen
@@ -197,13 +209,17 @@ F:	.gitlab-ci.yml
 F:	.travis.yml
 F:	automation/
 F:	scripts/travis-build
+```
 
+```
 CPU POOLS
 M:	Juergen Gross <jgross@suse.com>
 M:	Dario Faggioli <dfaggioli@suse.com>
 S:	Supported
 F:	xen/common/cpupool.c
+```
 
+```
 DEVICE TREE
 M:	Stefano Stabellini <sstabellini@kernel.org>
 M:	Julien Grall <julien.grall@arm.com>
@@ -213,7 +229,9 @@ F:	xen/common/device_tree.c
 F:	xen/include/xen/libfdt/
 F:	xen/include/xen/device_tree.h
 F:	xen/drivers/passthrough/device_tree.c
+```
 
+```
 EFI
 M:     Jan Beulich <jbeulich@suse.com>
 S:     Supported
@@ -222,25 +240,33 @@ F:     xen/common/efi/
 F:     xen/include/efi/
 F:     xen/include/asm-x86/efi*.h
 F:     xen/include/asm-x86/x86_*/efi*.h
+```
 
+```
 GDBSX DEBUGGER
 M:	Elena Ufimtseva <elena.ufimtseva@oracle.com>
 S:	Supported
 F:	xen/arch/x86/debug.c
 F:	tools/debugger/gdbsx/
+```
 
+```
 INTEL(R) TRUSTED EXECUTION TECHNOLOGY (TXT)
 M:	Gang Wei <gang.wei@intel.com>
 M:	Shane Wang <shane.wang@intel.com>
 S:	Supported
 F:	xen/arch/x86/tboot.c
 F:	xen/include/asm-x86/tboot.h
+```
 
+```
 INTEL(R) VT FOR DIRECTED I/O (VT-D)
 M:	Kevin Tian <kevin.tian@intel.com>
 S:	Supported
 F:	xen/drivers/passthrough/vtd/
+```
 
+```
 INTEL(R) VT FOR X86 (VT-X)
 M:	Jun Nakajima <jun.nakajima@intel.com>
 M:	Kevin Tian <kevin.tian@intel.com>
@@ -249,7 +275,9 @@ F:	xen/arch/x86/hvm/vmx/
 F:	xen/arch/x86/mm/p2m-ept.c
 F:	xen/include/asm-x86/hvm/vmx/
 F:	xen/arch/x86/cpu/vpmu_intel.c
+```
 
+```
 IOMMU VENDOR INDEPENDENT CODE
 M:	Jan Beulich <jbeulich@suse.com>
 S:	Supported
@@ -259,18 +287,24 @@ X:	xen/drivers/passthrough/arm/
 X:	xen/drivers/passthrough/vtd/
 X:	xen/drivers/passthrough/device_tree.c
 F:	xen/include/xen/iommu.h
+```
 
+```
 KCONFIG
 M:	Doug Goldstein <cardoe@cardoe.com>
 S:	Supported
 F:	docs/misc/kconfig{,-language}.txt
 F:	xen/tools/kconfig/
+```
 
+```
 KDD DEBUGGER
 M:	Tim Deegan <tim@xen.org>
 S:	Odd Fixes
 F:	tools/debugger/kdd/
+```
 
+```
 KEXEC
 M:      Andrew Cooper <andrew.cooper3@citrix.com>
 S:      Supported
@@ -278,7 +312,9 @@ F:      xen/common/{kexec,kimage}.c
 F:      xen/include/{kexec,kimage}.h
 F:      xen/arch/x86/machine_kexec.c
 F:      xen/arch/x86/x86_64/kexec_reloc.S
+```
 
+```
 LIVEPATCH
 M:  Konrad Rzeszutek Wilk <konrad.wilk@oracle.com>
 M:  Ross Lagerwall <ross.lagerwall@citrix.com>
@@ -291,26 +327,34 @@ F:  xen/common/livepatch*
 F:  xen/include/asm-*/livepatch.h
 F:  xen/include/xen/livepatch*
 F:  xen/test/livepatch/*
+```
 
+```
 MINI-OS
 M:	Samuel Thibault <samuel.thibault@ens-lyon.org>
 S:	Supported
 L:	minios-devel@lists.xenproject.org
 T:	git git://xenbits.xen.org/mini-os.git
 F:	config/MiniOS.mk
+```
 
+```
 OCAML TOOLS
 M:	Christian Lindig <christian.lindig@citrix.com>
 M:	David Scott <dave@recoil.org>
 S:	Supported
 F:	tools/ocaml/
+```
 
+```
 OVMF UPSTREAM
 M:	Anthony PERARD <anthony.perard@citrix.com>
 M:	Wei Liu <wei.liu2@citrix.com>
 S:	Supported
 T:	git git://xenbits.xen.org/ovmf.git
+```
 
+```
 POWER MANAGEMENT
 M:	Jan Beulich <jbeulich@suse.com>
 S:	Supported
@@ -319,28 +363,38 @@ X:	xen/arch/x86/acpi/boot.c
 X:	xen/arch/x86/acpi/lib.c
 F:	xen/drivers/cpufreq/
 F:	xen/include/acpi/cpufreq/
+```
 
+```
 PUBLIC I/O INTERFACES AND PV DRIVERS DESIGNS
 M:  Konrad Rzeszutek Wilk <konrad.wilk@oracle.com>
 S:  Supported
 F:  xen/include/public/io/
+```
 
+```
 PYTHON BINDINGS
 M:	Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>
 S:	Supported
 F:	tools/python
+```
 
+```
 QEMU-DM
 M:	Ian Jackson <ian.jackson@eu.citrix.com>
 S:	Supported
 T:	git git://xenbits.xen.org/qemu-xen-traditional.git
+```
 
+```
 QEMU UPSTREAM
 M:	Stefano Stabellini <sstabellini@kernel.org>
 M:	Anthony Perard <anthony.perard@citrix.com>
 S:	Supported
 T:	git git://xenbits.xen.org/qemu-xen.git
+```
 
+```
 REMUS
 M:	Shriram Rajagopalan <rshriram@cs.ubc.ca>
 M:	Yang Hongyang <imhy.yang@gmail.com>
@@ -351,31 +405,41 @@ F:	tools/libxl/libxl_netbuffer.c
 F:	tools/libxl/libxl_nonetbuffer.c
 F:	tools/hotplug/Linux/remus-netbuf-setup
 F:	tools/hotplug/Linux/block-drbd-probe
+```
 
+```
 RTDS SCHEDULER
 M:	Dario Faggioli <dfaggioli@suse.com>
 M:	Meng Xu <mengxu@cis.upenn.edu>
 S:	Supported
 F:	xen/common/sched_rt.c
+```
 
+```
 SCHEDULING
 M:	George Dunlap <george.dunlap@eu.citrix.com>
 M:	Dario Faggioli <dfaggioli@suse.com>
 S:	Supported
 F:	xen/common/sched*
+```
 
+```
 SEABIOS UPSTREAM
 M:	Wei Liu <wei.liu2@citrix.com>
 S:	Supported
 T:	git git://xenbits.xen.org/seabios.git
+```
 
+```
 STUB DOMAINS
 M:	Samuel Thibault <samuel.thibault@ens-lyon.org>
 S:	Supported
 F:	config/Stubdom.mk.in
 F:	m4/stubdom.m4
 F:	stubdom/
+```
 
+```
 TOOLSTACK
 M:	Ian Jackson <ian.jackson@eu.citrix.com>
 M:	Wei Liu <wei.liu2@citrix.com>
@@ -392,7 +456,9 @@ F:	*.ac
 F:	*/configure
 F:	*/*.ac
 F:	tools/
+```
 
+```
 TRANSCENDENT MEMORY (TMEM)
 M:	Konrad Rzeszutek Wilk <konrad.wilk@oracle.com>
 W:	http://oss.oracle.com/projects/tmem
@@ -400,19 +466,25 @@ S:	Supported
 F:	xen/common/tmem*
 F:	xen/include/xen/tmem*
 F:	docs/misc/tmem*
+```
 
+```
 UNMODIFIED LINUX PV DRIVERS
 M:	Jan Beulich <jbeulich@suse.com>
 S:	Obsolete
 L:	xen-devel@lists.xen.org
 F:	unmodified_drivers/linux-2.6/
+```
 
+```
 USB PV DRIVERS
 M:	Noboru Iwamatsu <n_iwamatsu@jp.fujitsu.com>
 S:	Supported
 T:	hg http://xenbits.xen.org/linux-2.6.18-xen.hg
 F:	drivers/xen/usb*/
+```
 
+```
 VM EVENT, MEM ACCESS and MONITOR
 M:	Razvan Cojocaru <rcojocaru@bitdefender.com>
 M:	Tamas K Lengyel <tamas@tklengyel.com>
@@ -432,7 +504,9 @@ F:	xen/include/*/monitor.h
 F:	xen/include/*/vm_event.h
 F:	xen/include/asm-x86/hvm/monitor.h
 F:	xen/include/asm-x86/hvm/vm_event.h
+```
 
+```
 VTPM
 M:	Daniel De Graaf <dgdegra@tycho.nsa.gov>
 M:	Quan Xu <quan.xu0@gmail.com>
@@ -442,7 +516,9 @@ F:	extras/mini-os/include/tpm*
 F:	stubdom/vtpm/
 F:	stubdom/vtpmmgr/
 F:	docs/misc/vtpm-platforms.txt
+```
 
+```
 X86 ARCHITECTURE
 M:	Jan Beulich <jbeulich@suse.com>
 M:	Andrew Cooper <andrew.cooper3@citrix.com>
@@ -456,7 +532,9 @@ F:	tools/firmware/rombios/
 F:	tools/firmware/vgabios/
 F:	tools/tests/x86_emulator/
 F:	tools/fuzz/x86_instruction_emulator/
+```
 
+```
 X86 I/O EMULATION
 M:	Paul Durrant <paul.durrant@citrix.com>
 S:	Supported
@@ -468,39 +546,53 @@ F:	xen/include/asm-x86/hvm/emulate.h
 F:	xen/include/asm-x86/hvm/io.h
 F:	xen/include/asm-x86/hvm/ioreq.h
 F:	xen/include/public/hvm/ioreq.h
+```
 
+```
 X86 MEMORY MANAGEMENT
 M:	George Dunlap <george.dunlap@eu.citrix.com>
 S:	Supported
 F:	xen/arch/x86/mm/
+```
 
+```
 X86 MEMORY PAGING
 S:	Orphaned
 F:	xen/arch/x86/mm/mem_paging.c
+```
 
+```
 X86 MEMORY SHARING
 M:	Tamas K Lengyel <tamas@tklengyel.com>
 S:	Odd Fixes
 F:	xen/arch/x86/mm/mem_sharing.c
 F:	tools/memshr
+```
 
+```
 X86 SHADOW PAGETABLES
 M:	Tim Deegan <tim@xen.org>
 S:	Maintained
 F:	xen/arch/x86/mm/shadow/
+```
 
+```
 X86 VIRIDIAN ENLIGHTENMENTS
 M:	Paul Durrant <paul.durrant@citrix.com>
 S:	Supported
 F:	xen/arch/x86/hvm/viridian.c
 F:	xen/include/asm-x86/hvm/viridian.h
+```
 
+```
 XENTRACE
 M:	George Dunlap <george.dunlap@eu.citrix.com>
 S:	Supported
 F:	tools/xentrace/
 F:	xen/common/trace.c
+```
 
+```
 XSM/FLASK
 M:  Daniel De Graaf <dgdegra@tycho.nsa.gov>
 S:  Supported
@@ -508,7 +600,9 @@ F:  tools/flask/
 F:  xen/include/xsm/
 F:  xen/xsm/
 F:  docs/misc/xsm-flask.txt
+```
 
+```
 THE REST
 M:	Andrew Cooper <andrew.cooper3@citrix.com>
 M:	George Dunlap <George.Dunlap@eu.citrix.com>
@@ -523,3 +617,4 @@ L:	xen-devel@lists.xen.org
 S:	Supported
 F:	*
 F:	*/
+```
